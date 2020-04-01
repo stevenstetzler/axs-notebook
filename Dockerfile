@@ -7,3 +7,44 @@ FROM jupyter/base-notebook
 
 # If you do switch to root, always be sure to add a "USER $NB_USER" command at the end of the
 # file to ensure the image runs as a unprivileged user by default.
+
+USER root
+
+# Install Java
+RUN apt-get -y update && \
+    apt-get install --no-install-recommends -y openjdk-8-jre-headless ca-certificates-java && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy start up scripts
+COPY scripts/start-spark.sh /usr/local/bin/
+COPY scripts/entrypoint.sh /usr/local/bin/
+COPY scripts/pre-start-source.sh /usr/local/bin/
+ENTRYPOINT [ "/usr/local/bin/entrypoint.sh" ]
+
+USER $NB_UID
+
+# Install AXS
+ARG AXS_VERSION=v1.0
+ENV AXS_URL=https://github.com/astronomy-commons/axs/releases/download/$AXS_VERSION/axs-distribution.tar.gz
+ENV AXS_HOME=/opt/axs
+
+RUN cd /tmp && \
+    wget -q -O axs-distribution.tar.gz $AXS_URL && \
+    mkdir $AXS_HOME && \
+    tar xf axs-distribution.tar.gz --strip 1 -C $AXS_HOME && \
+    rm axs-distribution.tar.gz
+# RUN $AXS_HOME/bin/axs-init-config.sh
+
+# Update environment variables
+ENV SPARK_HOME $AXS_HOME
+ENV PATH $PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+
+# Install pyarrow, numpy, pandas
+RUN conda install --quiet --yes \
+    'pyarrow' \
+    'numpy' \
+    'pandas' && \
+    conda clean --all -f -y && \
+    fix-permissions $CONDA_DIR && \
+    fix-permissions /home/$NB_USER
+
